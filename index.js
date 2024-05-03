@@ -4,16 +4,20 @@ const cheerio = require('cheerio');
 const { parseStringPromise } = require('xml2js');
 const path = require('path');
 
+// Setting up the Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Middleware for parsing JSON and URL-encoded data
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Route to serve the main HTML file
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Route to handle the POST request for scraping
 app.post('/scrape', async (req, res) => {
     const websiteUrl = req.body.url;
     try {
@@ -26,63 +30,44 @@ app.post('/scrape', async (req, res) => {
     }
 });
 
+// Function to determine the scraping method based on the presence of a sitemap
 async function getAllUrlsFromSitemapOrPage(url) {
     try {
-        // Check if a sitemap exists
         const sitemapUrl = await getSitemapUrl(url);
-        if (sitemapUrl) {
-            // Fetch URLs from the sitemap
-            return await getAllUrlsFromSitemap(sitemapUrl);
-        } else {
-            // Fall back to scraping URLs from the page
-            return await getAllUrlsFromPage(url);
-        }
+        return sitemapUrl ? await getAllUrlsFromSitemap(sitemapUrl) : await getAllUrlsFromPage(url);
     } catch (error) {
         console.error('Error:', error);
         throw error;
     }
 }
 
+// Function to find a sitemap link on a given page
 async function getSitemapUrl(url) {
     try {
         const response = await axios.get(url);
         const $ = cheerio.load(response.data);
         const sitemapLink = $('a[href*="sitemap"]').first().attr('href');
-        if (sitemapLink) {
-            const sitemapUrl = new URL(sitemapLink, url).href;
-            return sitemapUrl;
-        } else {
-            return null;
-        }
+        return sitemapLink ? new URL(sitemapLink, url).href : null;
     } catch (error) {
         console.error('Error fetching sitemap URL:', error);
         throw error;
     }
 }
 
+// Function to fetch URLs from a sitemap
 async function getAllUrlsFromSitemap(sitemapUrl) {
     try {
         const response = await axios.get(sitemapUrl);
         const xml = response.data;
         const parsedXml = await parseStringPromise(xml);
-        let urls = [];
-        if (parsedXml.urlset && parsedXml.urlset.url) {
-            urls = parsedXml.urlset.url.map(url => url.loc[0]);
-        } else if (parsedXml.sitemapindex && parsedXml.sitemapindex.sitemap) {
-            const sitemaps = parsedXml.sitemapindex.sitemap;
-            for (const sitemap of sitemaps) {
-                const sitemapUrl = sitemap.loc[0];
-                const urlsFromSitemap = await getAllUrlsFromSitemap(sitemapUrl);
-                urls.push(...urlsFromSitemap);
-            }
-        }
-        return urls;
+        return parsedXml.urlset ? parsedXml.urlset.url.map(url => url.loc[0]) : [];
     } catch (error) {
         console.error('Error fetching sitemap:', error);
         throw error;
     }
 }
 
+// Function to scrape URLs directly from a webpage
 async function getAllUrlsFromPage(url) {
     try {
         const response = await axios.get(url);
@@ -90,7 +75,7 @@ async function getAllUrlsFromPage(url) {
         const urls = [];
         $('a').each((i, link) => {
             const href = $(link).attr('href');
-            if (href && !href.startsWith('mailto:') && !href.startsWith('tel:')) {
+            if (href && !href.startsWith('mailto:') && !href.startsWith('tel:') && !href.includes('#')) {
                 urls.push(href);
             }
         });
@@ -101,6 +86,7 @@ async function getAllUrlsFromPage(url) {
     }
 }
 
+// Function to generate an HTML table from scraped URLs
 function generateHtmlTable(urls) {
     const html = `
         <html>
@@ -114,11 +100,11 @@ function generateHtmlTable(urls) {
         </head>
         <body>
             <h1>Scraped Paths</h1>
+            <button onclick="copyTable()">Copy Table</button>
             <table id="pathsTable">
                 <tr><th>#</th><th>Path</th></tr>
                 ${urls.map((url, index) => `<tr><td>${index + 1}</td><td>${url}</td></tr>`).join('')}
             </table>
-            <button onclick="copyTable()">Copy Table</button>
             <script>
                 function copyTable() {
                     const table = document.getElementById('pathsTable');
@@ -137,6 +123,7 @@ function generateHtmlTable(urls) {
     return html;
 }
 
+// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
