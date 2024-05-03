@@ -1,0 +1,8 @@
+{
+    "version": 2,
+    "routes": [
+      { "src": "/scrape", "dest": "/index.js", "methods": ["POST"] },
+      { "src": "/(.*)", "dest": "/index.js" }
+    ]
+  }
+  
