@@ -1,9 +1,11 @@
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { parseStringPromise } = require('xml2js');
 const path = require('path');
+
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -13,39 +15,93 @@ app.get('/', (req, res) => {
 });
 
 app.post('/scrape', async (req, res) => {
-    const rootUrl = req.body.url;
-    let urlsToVisit = [new URL(rootUrl).pathname];  // Start with the path of the root URL
-    let visitedUrls = new Set();
+    const websiteUrl = req.body.url;
+    try {
+        const urls = await getAllUrlsFromSitemapOrPage(websiteUrl);
+        const html = generateHtmlTable(urls);
+        res.send(html);
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).send('An error occurred while scraping the website.');
+    }
+});
 
-    async function crawl() {
-        while (urlsToVisit.length > 0) {
-            const path = urlsToVisit.shift();
-            const fullUrl = new URL(path, rootUrl).href;  // Resolve the full URL
+async function getAllUrlsFromSitemapOrPage(url) {
+    try {
+        // Check if a sitemap exists
+        const sitemapUrl = await getSitemapUrl(url);
+        if (sitemapUrl) {
+            // Fetch URLs from the sitemap
+            return await getAllUrlsFromSitemap(sitemapUrl);
+        } else {
+            // Fall back to scraping URLs from the page
+            return await getAllUrlsFromPage(url);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        throw error;
+    }
+}
 
-            if (!visitedUrls.has(path) && fullUrl.startsWith(rootUrl)) {
-                visitedUrls.add(path);
-                try {
-                    const response = await axios.get(fullUrl);
-                    const $ = cheerio.load(response.data);
-                    $('a').each((i, link) => {
-                        const href = $(link).attr('href');
-                        if (href && !href.startsWith('mailto:') && !href.startsWith('tel:')) {
-                            const resolvedUrl = new URL(href, rootUrl);
-                            const resolvedPath = resolvedUrl.pathname;
-                            if (resolvedPath !== '/' && resolvedPath !== '') {
-                                urlsToVisit.push(resolvedPath);  // Push path, not full URL
-                            }
-                        }
-                    });
-                } catch (error) {
-                    console.error('Failed to crawl:', fullUrl, error);
-                }
+async function getSitemapUrl(url) {
+    try {
+        const response = await axios.get(url);
+        const $ = cheerio.load(response.data);
+        const sitemapLink = $('a[href*="sitemap"]').first().attr('href');
+        if (sitemapLink) {
+            const sitemapUrl = new URL(sitemapLink, url).href;
+            return sitemapUrl;
+        } else {
+            return null;
+        }
+    } catch (error) {
+        console.error('Error fetching sitemap URL:', error);
+        throw error;
+    }
+}
+
+async function getAllUrlsFromSitemap(sitemapUrl) {
+    try {
+        const response = await axios.get(sitemapUrl);
+        const xml = response.data;
+        const parsedXml = await parseStringPromise(xml);
+        let urls = [];
+        if (parsedXml.urlset && parsedXml.urlset.url) {
+            urls = parsedXml.urlset.url.map(url => url.loc[0]);
+        } else if (parsedXml.sitemapindex && parsedXml.sitemapindex.sitemap) {
+            const sitemaps = parsedXml.sitemapindex.sitemap;
+            for (const sitemap of sitemaps) {
+                const sitemapUrl = sitemap.loc[0];
+                const urlsFromSitemap = await getAllUrlsFromSitemap(sitemapUrl);
+                urls.push(...urlsFromSitemap);
             }
         }
+        return urls;
+    } catch (error) {
+        console.error('Error fetching sitemap:', error);
+        throw error;
     }
+}
 
-    await crawl();
-    const pathsArray = Array.from(visitedUrls);
+async function getAllUrlsFromPage(url) {
+    try {
+        const response = await axios.get(url);
+        const $ = cheerio.load(response.data);
+        const urls = [];
+        $('a').each((i, link) => {
+            const href = $(link).attr('href');
+            if (href && !href.startsWith('mailto:') && !href.startsWith('tel:')) {
+                urls.push(href);
+            }
+        });
+        return urls;
+    } catch (error) {
+        console.error('Error fetching URLs from page:', error);
+        throw error;
+    }
+}
+
+function generateHtmlTable(urls) {
     const html = `
         <html>
         <head>
@@ -60,28 +116,26 @@ app.post('/scrape', async (req, res) => {
             <h1>Scraped Paths</h1>
             <table id="pathsTable">
                 <tr><th>#</th><th>Path</th></tr>
-                ${pathsArray.map((path, index) => `<tr><td>${index + 1}</td><td>${path}</td></tr>`).join('')}
+                ${urls.map((url, index) => `<tr><td>${index + 1}</td><td>${url}</td></tr>`).join('')}
             </table>
-            <button onclick="copyTable()">Copy Paths</button>
+            <button onclick="copyTable()">Copy Table</button>
             <script>
                 function copyTable() {
-                    const rows = document.querySelectorAll('#pathsTable tr');
-                    let textToCopy = '';
-                    rows.forEach(row => {
-                        textToCopy += row.cells[1].textContent + '\\n'; // Only copy the second cell (path)
-                    });
-                    navigator.clipboard.writeText(textToCopy).then(() => {
-                        alert('Paths copied to clipboard');
-                    }).catch(err => {
-                        console.error('Failed to copy text: ', err);
-                    });
+                    const table = document.getElementById('pathsTable');
+                    const range = document.createRange();
+                    range.selectNode(table);
+                    window.getSelection().removeAllRanges();
+                    window.getSelection().addRange(range);
+                    document.execCommand('copy');
+                    window.getSelection().removeAllRanges();
+                    alert('Table copied to clipboard');
                 }
             </script>
         </body>
         </html>
     `;
-    res.send(html);
-});
+    return html;
+}
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
