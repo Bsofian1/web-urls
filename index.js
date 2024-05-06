@@ -3,6 +3,8 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const { parseStringPromise } = require('xml2js');
 const path = require('path');
+const url = require('url'); // Import URL module to parse URLs
+
 
 // Setting up the Express app
 const app = express();
@@ -17,11 +19,15 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Route to handle the POST request for scraping
 app.post('/scrape', async (req, res) => {
-    const websiteUrl = req.body.url;
+    const inputUrl = req.body.url;
     try {
-        const urls = await getAllUrlsFromSitemapOrPage(websiteUrl);
+        let urls;
+        if (inputUrl.endsWith('.xml')) {  // Check if URL is a sitemap
+            urls = await getAllUrlsFromSitemap(inputUrl);
+        } else {
+            urls = await recursiveCrawl(inputUrl);
+        }
         const html = generateHtmlTable(urls);
         res.send(html);
     } catch (error) {
@@ -30,31 +36,50 @@ app.post('/scrape', async (req, res) => {
     }
 });
 
-// Function to determine the scraping method based on the presence of a sitemap
-async function getAllUrlsFromSitemapOrPage(url) {
-    try {
-        const sitemapUrl = await getSitemapUrl(url);
-        return sitemapUrl ? await getAllUrlsFromSitemap(sitemapUrl) : await getAllUrlsFromPage(url);
-    } catch (error) {
-        console.error('Error:', error);
-        throw error;
+async function recursiveCrawl(baseUrl, seenUrls = new Set(), baseHostname) {
+    // Parse the base URL to get the hostname if it's not provided
+    if (!baseHostname) {
+        baseHostname = new URL(baseUrl).hostname;
     }
-}
 
-// Function to find a sitemap link on a given page
-async function getSitemapUrl(url) {
+    // This checks if we've already processed this URL
+    if (seenUrls.has(baseUrl)) {
+        return [];
+    }
+
+    seenUrls.add(baseUrl); // Mark this URL as seen
+
     try {
-        const response = await axios.get(url);
+        const response = await axios.get(baseUrl, {timeout: 5000}); // Added timeout for requests
         const $ = cheerio.load(response.data);
-        const sitemapLink = $('a[href*="sitemap"]').first().attr('href');
-        return sitemapLink ? new URL(sitemapLink, url).href : null;
+        const urls = [];
+
+        $('a').each((index, element) => {
+            const href = $(element).attr('href');
+            if (href) {
+                const fullUrl = new URL(href, baseUrl).href; // Normalize the URL
+                // Check if the URL belongs to the same domain and hasn't been seen
+                if (new URL(fullUrl).hostname === baseHostname &&
+                    !fullUrl.startsWith('mailto:') &&
+                    !fullUrl.startsWith('tel:') &&
+                    !fullUrl.includes('#') &&
+                    !seenUrls.has(fullUrl)) {
+                    urls.push(fullUrl);
+                }
+            }
+        });
+
+        // Recursively process each URL and flatten the results into a single array
+        const results = await Promise.all(urls.map(url => recursiveCrawl(url, seenUrls, baseHostname)));
+        return [baseUrl, ...results.flat()];
+
     } catch (error) {
-        console.error('Error fetching sitemap URL:', error);
-        throw error;
+        console.error(`Error crawling ${baseUrl}: ${error.message}`);
+        return []; // Continue with other URLs if an error occurs
     }
 }
 
-// Function to fetch URLs from a sitemap
+
 async function getAllUrlsFromSitemap(sitemapUrl) {
     try {
         const response = await axios.get(sitemapUrl);
@@ -67,27 +92,9 @@ async function getAllUrlsFromSitemap(sitemapUrl) {
     }
 }
 
-// Function to scrape URLs directly from a webpage
-async function getAllUrlsFromPage(url) {
-    try {
-        const response = await axios.get(url);
-        const $ = cheerio.load(response.data);
-        const urls = [];
-        $('a').each((i, link) => {
-            const href = $(link).attr('href');
-            if (href && !href.startsWith('mailto:') && !href.startsWith('tel:') && !href.includes('#')) {
-                urls.push(href);
-            }
-        });
-        return urls;
-    } catch (error) {
-        console.error('Error fetching URLs from page:', error);
-        throw error;
-    }
-}
-
-// Function to generate an HTML table from scraped URLs
 function generateHtmlTable(urls) {
+    // Deduplicate URLs for the table display
+    const uniqueUrls = [...new Set(urls)];
     const html = `
         <html>
         <head>
@@ -103,7 +110,7 @@ function generateHtmlTable(urls) {
             <button onclick="copyTable()">Copy Table</button>
             <table id="pathsTable">
                 <tr><th>#</th><th>Path</th></tr>
-                ${urls.map((url, index) => `<tr><td>${index + 1}</td><td>${url}</td></tr>`).join('')}
+                ${uniqueUrls.map((url, index) => `<tr><td>${index + 1}</td><td>${url}</td></tr>`).join('')}
             </table>
             <script>
                 function copyTable() {
@@ -123,7 +130,6 @@ function generateHtmlTable(urls) {
     return html;
 }
 
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
