@@ -10,6 +10,9 @@ const url = require('url'); // Import URL module to parse URLs
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(express.static(path.join(__dirname, 'public')));
+
+
 // Middleware for parsing JSON and URL-encoded data
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

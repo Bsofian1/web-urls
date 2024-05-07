@@ -1,0 +1,75 @@
+/* Base styles for the container */
+body{
+    font-family: Arial, sans-serif;
+}
+
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 30vh;
+    width: 100%;    
+    margin: 0;
+}
+
+form {
+    width: 75%;
+  margin: 0 auto;
+}
+
+/* Input and button container */
+.input-container {
+    display: flex;
+    direction: ltr;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    box-shadow: rgba(50, 50, 93, 0.25) 0px 50px 100px -20px, rgba(0, 0, 0, 0.3) 0px 30px 60px -30px;
+    overflow: hidden;
+    padding: 20px;
+}
+
+/* URL input field styling */
+#url-input {
+    width: 100%;
+    padding: 10px 15px;
+    border: none;
+    outline: none;
+    font-size: 16px;
+}
+
+#url-input:focus {
+    background-color: white;
+  }
+
+/* Generate button styling */
+#generate-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f0f0f0;
+    padding: 10px 20px;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    font-size: 16px;
+    border-radius: 10px;
+    transition: background-color 0.2s ease;
+}
+
+#generate-btn .icon {
+    margin-right: 15px; /* Space between icon and "Generate" text */
+    width: 15px;
+    height: 15px;
+}
+
+#generate-btn:hover {
+    background-color: #e0e0e0;
+}
+
+#generate-btn:active {
+    background-color: #d0d0d0;
+}
