@@ -102,18 +102,42 @@ function generateHtmlTable(urls) {
         <html>
         <head>
             <title>Scrape Results</title>
+            <link rel="stylesheet" href="styles.css">
             <style>
                 table { width: 100%; border-collapse: collapse; }
                 th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                th { background-color: #f2f2f2; }
+                th { background-color: #e0e0e0; }
+                #copy-btn {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background-color: #f0f0f0;
+                    padding: 10px 20px;
+                    border: none;
+                    outline: none;
+                    cursor: pointer;
+                    font-size: 16px;
+                    border-radius: 10px;
+                    transition: background-color 0.2s ease;
+                }
+                #btn-wrapper {
+                    width: 100%;
+                    margin-top: 10px;
+                    margin-bottom: 10px;
+                }
             </style>
         </head>
         <body>
             <h1>Scraped Paths</h1>
-            <button onclick="copyTable()">Copy Table</button>
+            <div id="btn-wrapper">
+                <button onclick="copyTable()" id="copy-btn">Copy Table</button>
+            </div>
             <table id="pathsTable">
                 <tr><th>#</th><th>Path</th></tr>
-                ${uniqueUrls.map((url, index) => `<tr><td>${index + 1}</td><td>${url}</td></tr>`).join('')}
+                ${uniqueUrls.map((url, index) => {
+                    const pathname = new URL(url).pathname;
+                    return `<tr><td>${index + 1}</td><td>${pathname}</td></tr>`;
+                }).join('')}
             </table>
             <script>
                 function copyTable() {
@@ -132,6 +156,7 @@ function generateHtmlTable(urls) {
     `;
     return html;
 }
+
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

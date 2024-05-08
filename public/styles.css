@@ -60,6 +60,7 @@ form {
     transition: background-color 0.2s ease;
 }
 
+
 #generate-btn .icon {
     margin-right: 15px; /* Space between icon and "Generate" text */
     width: 15px;
@@ -73,3 +74,15 @@ form {
 #generate-btn:active {
     background-color: #d0d0d0;
 }
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active{
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: #000000;
+}
+
+
+
+
