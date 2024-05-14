@@ -64,8 +64,8 @@ Navigate to http://localhost:3000 in your browser to see the application running
 
 POST /scrape: Sends a POST request with a JSON body containing the URL. Example:
 
-```json
-{ "url": "http://example.com" }
+   ```json
+   { "url": "http://example.com/scrape" }
 
 ## Built With
 
